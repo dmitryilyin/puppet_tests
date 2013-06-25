@@ -1,7 +1,7 @@
 #!/usr/bin/env python
+import sys
+from Color import Color
 
-
-# Interface ###########################################################
 class Interface:
     def __init__(
             self,
@@ -9,8 +9,8 @@ class Interface:
             debugout="stderr",
             errorout="stderr",
             codepage="UTF-8",
-            errorcolor=None,
-            debugcolor=None
+            errorcolor=Color(fgcode='red'),
+            debugcolor=Color(fgcode='blue')
     ):
         self.debuglevel = debuglevel
         self.debugout = debugout
