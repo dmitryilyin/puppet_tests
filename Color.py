@@ -1,9 +1,22 @@
 #!/usr/bin/env pyton
+#
+# 8 colors mode
+# 30 - 37 - Foreground color codes
+# 40 - 47 - Background color codes
+# 0 - 9 - Special Attributes
+#
+# 16 colors mode
+# color + 60 = 'bright' version
+#
+# 256 Colors mode (not supported by this module)
+# 38;5;ColorNumber - 256 color mode Foreground
+# 48;5;ColorNumber - 256 color mode Background
+# ColorNumber - 1 - 256 color code
 
 
 class Color:
     """
-    This class is used for coloring terminal output of Python programms
+    This class is used for coloring terminal output of Python programs
     """
     def __init__(self, fgcode=None, bgcode=None, attrcode=0, enabled=True, brightfg=False, brightbg=False):
         """
@@ -48,13 +61,13 @@ class Color:
             'normal': 0,
             'bold': 1,
             'faint': 2,
-            #'italic':    3,
+            'italic':    3,
             'underline': 4,
             'blink': 5,
-            #'rblink':    6,
+            'rblink':    6,
             'negative': 7,
             'conceal': 8,
-            #'crossed':   9,
+            'crossed':   9,
             'off': 0,
         }
 
