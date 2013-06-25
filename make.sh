@@ -1,1 +1,1 @@
-python MakeTests.py test_data tests
+python MakeTests.py test_data tests /tmp/puppet

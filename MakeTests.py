@@ -10,11 +10,12 @@ class PuppetTest:
     This class represents single test of the Puppet module.
     """
 
-    def __init__(self, file_path):
+    def __init__(self, file_path, tests_internal_path=None):
         """
         You should give this constructor the full path to the tests' file.
         """
         self.file_path = file_path
+        self.tests_internal_path = tests_internal_path
         self.file_name = os.path.basename(self.file_path)
         self.test_name = self.file_name.replace('.pp', '').title()
 
@@ -22,7 +23,11 @@ class PuppetTest:
         """
         Returns full path to the tests' file
         """
-        return self.file_path
+        if self.tests_internal_path:
+            file_internal_path = os.path.join(self.tests_internal_path, self.file_name)
+            return file_internal_path
+        else:
+            return self.file_path
 
     def getFile(self):
         """
@@ -60,11 +65,12 @@ class PuppetModule:
     This class represents Puppet module
     """
 
-    def __init__(self, module_path):
+    def __init__(self, module_path, modules_internal_path=None):
         """
         You should give this constructor the full path to the module
         """
         self.module_path = module_path
+        self.modules_internal_path = modules_internal_path
         self.module_name = os.path.basename(self.module_path)
         self.tests = []
         self.findTests()
@@ -78,7 +84,11 @@ class PuppetModule:
             if not test_file[-3:] == '.pp':
                 continue
             full_test_path = os.path.join(self.module_path, 'tests', test_file)
-            puppet_test = PuppetTest(full_test_path)
+            if self.modules_internal_path:
+                tests_internal_path = os.path.join(self.modules_internal_path, self.name, 'tests')
+                puppet_test = PuppetTest(full_test_path, tests_internal_path)
+            else:
+                puppet_test = PuppetTest(full_test_path)
             self.tests.append(puppet_test)
 
     def getTests(self):
@@ -128,9 +138,13 @@ class MakeTests:
     This is main class. It finds all modules in the given directory and creates tests for them.
     """
 
-    def __init__(self, module_library_path, tests_directory_path):
+    def __init__(self, module_library_path, tests_directory_path, modules_internal_path=None):
         """
-        You should give path to modules library and path to output tests directory to this constructor
+        You should give to this constructor following arguments:
+        module_library_path = Path to puppet modules which will be scanned for test files
+        tests_directory_path = Output directory where files will be written
+        modules_internal_path = (Optional) Use this path to modules in template instead of module_library_path.
+        Useful when path to puppet modules differ on machine where tests are made and where they are executed.
         """
         self.interface = Interface(debuglevel=1)
         if not os.path.isdir(module_library_path):
@@ -143,6 +157,7 @@ class MakeTests:
         self.manifests_path = "/etc/puppet/manifests"
         self.module_library_path = module_library_path
         self.tests_directory_path = tests_directory_path
+        self.modules_internal_path = modules_internal_path
         self.default_template_file = "puppet_module_test.py"
         self.modules = []
         self.module_templates = {}
@@ -203,7 +218,7 @@ class MakeTests:
             if not os.path.isdir(tests_dir):
                 continue
             full_module_dir = os.path.join(self.module_library_path, module_dir)
-            puppet_module = PuppetModule(full_module_dir)
+            puppet_module = PuppetModule(full_module_dir, self.modules_internal_path)
             self.modules.append(puppet_module)
 
     def compileScript(self, module):
@@ -253,7 +268,7 @@ class MakeTests:
             os.remove(full_file_path)
 
 if __name__ == '__main__':
-    MT = MakeTests(sys.argv[1], sys.argv[2])
+    MT = MakeTests(sys.argv[1], sys.argv[2], sys.argv[3])
     MT.setModuleTemplates({'motd': 'motd_module_custom_test.py'})
     MT.removeAllTests()
     MT.makeAllScripts()
