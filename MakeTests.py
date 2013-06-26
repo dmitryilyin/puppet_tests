@@ -10,34 +10,30 @@ class PuppetTest:
     This class represents single test of the Puppet module.
     """
 
-    def __init__(self, file_path, tests_internal_path=None):
+    def __init__(self, test_file_path, interface):
         """
-        You should give this constructor the full path to the tests' file.
+        You should give this constructor path to test file
         """
-        self.__file_path = file_path
-        self.__tests_internal_path = tests_internal_path
-        self.__tests_path = os.path.dirname(self.__file_path)
-        self.__file_name = os.path.basename(self.__file_path)
-        self.__test_name = self.__file_name.replace('.pp', '')
+        self.__test_file_path = test_file_path
+        self.__tests_path = os.path.dirname(self.__test_file_path)
+        self.__test_file_name = os.path.basename(self.__test_file_path)
+        self.__test_name = self.__test_file_name.replace('.pp', '')
 
     def getPath(self):
         """
-        Returns full path to the tests' file
+        Returns path to directory of this test
         """
-        if self.__tests_internal_path:
-            return self.__tests_internal_path
-        else:
-            return self.__tests_path
+        return self.__tests_path
 
     def getFile(self):
         """
-        Returns only name of this tests' file
+        Returns file name of this test
         """
-        return self.__file_name
+        return self.__test_file_name
 
     def getName(self):
         """
-        Returns title cased tests' name
+        Returns name of this test
         """
         return self.__test_name
 
@@ -57,7 +53,7 @@ class PuppetTest:
         """
         String representation of PuppetTest
         """
-        return "PuppetTest: Name: %s Path: %s File: %s" % (self.getName(), self.getPath(), self.getFile())
+        return "PuppetTest(name=%s, path=%s, file=%s)" % (self.getName(), self.getPath(), self.getFile())
 
 
 class PuppetModule:
@@ -65,35 +61,43 @@ class PuppetModule:
     This class represents Puppet module
     """
 
-    def __init__(self, module_path, modules_internal_path=None):
+    def __init__(self, local_module_path, interface):
         """
         You should give this constructor the full path to the module
         """
-        self.__module_path = module_path
-        self.__modules_internal_path = modules_internal_path
-        self.__module_name = os.path.basename(self.__module_path)
+        self.__local_module_path = local_module_path
+        self.interface = interface
+        self.__module_name = os.path.basename(self.__local_module_path)
+
         self.__tests = []
+
         self.findTests()
 
     def findTests(self):
         """
         Find all tests in this module and fill tests array with PuppetTest objects.
         """
-        tests_path = os.path.join(self.__module_path, 'tests')
-        for root, dirs, files in os.walk(tests_path):
-            for test_file in files:
-                if not test_file[-3:] == '.pp':
-                    continue
-                full_test_path = os.path.join(root, test_file)
-
-                if self.__modules_internal_path:
-                    # replace real path to module to internal path to module
-                    module_internal_path = os.path.join(self.__modules_internal_path, self.__module_name)
-                    tests_internal_path = root.replace(self.__module_path, module_internal_path)
-                    puppet_test = PuppetTest(full_test_path, tests_internal_path)
-                else:
-                    puppet_test = PuppetTest(full_test_path)
-                self.__tests.append(puppet_test)
+        current_path = os.path.abspath(os.curdir)
+        try:
+            # try to change directory to test's folder
+            os.chdir(self.__local_module_path)
+        except OSError as error:
+            self.interface.error("Cannot change directory to %s: %s" % (self.__local_module_path, error.message))
+        else:
+            # if change was successful start looking for tests
+            for root, dirs, files in os.walk('tests'):
+                for test_file in files:
+                    if not test_file[-3:] == '.pp':
+                        continue
+                    test_file_path = os.path.join(root, test_file)
+                    puppet_test = PuppetTest(test_file_path, self.interface)
+                    self.__tests.append(puppet_test)
+        finally:
+            # try to restore original folder on exit
+            try:
+                os.chdir(current_path)
+            except OSError as error:
+                self.interface.error("Cannot change directory to %s: %s" % (self.__local_module_path, error.message), 1)
 
     def getTests(self):
         """
@@ -111,10 +115,7 @@ class PuppetModule:
         """
         Returns full path to this module
         """
-        if self.__modules_internal_path:
-            return self.__modules_internal_path
-        else:
-            return self.__module_path
+        return self.__local_module_path
 
     @property
     def tests(self):
@@ -132,11 +133,12 @@ class PuppetModule:
         """
         String representation of PuppetModule
         """
-        tpl = "\nPuppetModule: Name: %s Path: %s\n" % (self.getName(), self.getPath())
+        tests_string = ''
         if len(self.tests) > 0:
-            tpl += "  Tests:\n"
-            tests = ["  " + repr(test) for test in self.tests]
-            tpl += "\n".join(tests)
+            tests = [repr(test) for test in self.tests]
+            tests_string += ", ".join(tests)
+        tpl = "PuppetModule(name=%s, path=%s, tests=[%s]" % (self.getName(), self.getPath(), tests_string)
+
         return tpl
 
 
@@ -145,7 +147,7 @@ class MakeTests:
     This is main class. It finds all modules in the given directory and creates tests for them.
     """
 
-    def __init__(self, module_library_path, tests_directory_path, modules_internal_path=None):
+    def __init__(self, tests_directory_path, local_modules_path, modules_path=None):
         """
         You should give to this constructor following arguments:
         module_library_path = Path to puppet modules which will be scanned for test files
@@ -153,22 +155,32 @@ class MakeTests:
         modules_internal_path = (Optional) Use this path to modules in template instead of module_library_path.
         Useful when path to puppet modules differ on machine where tests are made and where they are executed.
         """
-        self.interface = Interface(debuglevel=1)
-        if not os.path.isdir(module_library_path):
-            self.interface.error("No such dir: " + module_library_path, 1)
+        self.interface = Interface(debuglevel=4)
+        self.interface.debug('Starting MakeTests', 1)
+
+        if not os.path.isdir(local_modules_path):
+            self.interface.error('No such dir: ' + local_modules_path, 1)
 
         if not os.path.isdir(tests_directory_path):
-            self.interface.error("No such dir: " + tests_directory_path, 1)
+            self.interface.error('No such dir: ' + tests_directory_path, 1)
 
-        self.__module_library_path = module_library_path
+        self.__local_modules_path = local_modules_path
+        self.__modules_path = local_modules_path
+        if modules_path:
+            self.__modules_path = modules_path
         self.__tests_directory_path = tests_directory_path
-        self.__modules_internal_path = modules_internal_path
-        self.__default_template_file = "puppet_module_test.py"
+
+        self.__default_template_file = 'puppet_module_test.py'
+        self.__test_file_name_prefix = 'TestPuppetModule'
+
         self.__modules = []
         self.__module_templates = {}
+        self.__make_tests_dir = os.path.dirname(os.path.abspath(__file__))
+
         self.setTemplatesDir('templates')
-        self.setModulesPath("/etc/puppet/modules")
-        self.setManifestsPath("/etc/puppet/manifests")
+        self.setInternalModulesPath('/etc/puppet/modules')
+        self.setInternalManifestsPath('/etc/puppet/manifests')
+
         self.findModules()
 
     def setTemplatesDir(self, template_dir):
@@ -176,10 +188,10 @@ class MakeTests:
         Set directory to take templates from
         """
         if not os.path.isdir(template_dir):
-            self.interface.error("No such dir: " + template_dir, 0)
-        self.template_loader = jinja2.FileSystemLoader(searchpath=template_dir)
-        self.template_environment = templateEnv = jinja2.Environment(
-            loader=self.template_loader,
+            self.interface.error("No such dir: " + template_dir)
+        self.__template_loader = jinja2.FileSystemLoader(searchpath=template_dir)
+        self.__template_environment = templateEnv = jinja2.Environment(
+            loader=self.__template_loader,
         )
 
     def setModuleTemplates(self, module_templates_dictionary):
@@ -189,29 +201,29 @@ class MakeTests:
         if type(module_templates_dictionary) is dict:
             self.__module_templates = module_templates_dictionary
         else:
-            self.interface.error("Argument is not Dictionary", 0)
+            self.interface.error("Argument is not Dictionary")
 
-    def setTemplateFile(self, template_file):
+    def setDefaultTemplateFile(self, template_file):
         """
-        Set script template file
+        Set default script template file
         """
         self.__default_template_file = template_file
 
-    def setModulesPath(self, modules_path):
+    def setInternalModulesPath(self, internal_modules_path):
         """
         Set path to modules inside virtual machine
         """
-        self.__modules_path = modules_path
+        self.__internal_modules_path = internal_modules_path
 
-    def setManifestsPath(self, manifests_path):
+    def setInternalManifestsPath(self, internal_manifests_path):
         """
         Set path to manifests directory inside virtual machine
         """
-        self.__manifests_path = manifests_path
+        self.__internal_manifests_path = internal_manifests_path
 
-    def getModules(self):
+    def getModulesList(self):
         """
-        Get array of PuppetModule objects
+        Get list of PuppetModule objects
         """
         return self.__modules
 
@@ -220,12 +232,14 @@ class MakeTests:
         Find all Puppet modules in module_library_path
         and create array of PuppetModule objects
         """
-        for module_dir in os.listdir(self.__module_library_path):
-            tests_dir = os.path.join(self.__module_library_path, module_dir, 'tests')
-            if not os.path.isdir(tests_dir):
+        self.interface.debug('Starting findModules in "%s"' % self.__local_modules_path, 2)
+        for module_dir in os.listdir(self.__local_modules_path):
+            full_local_module_path = os.path.join(self.__local_modules_path, module_dir)
+            full_local_tests_path = os.path.join(full_local_module_path, 'tests')
+            if not os.path.isdir(full_local_tests_path):
                 continue
-            full_module_dir = os.path.join(self.__module_library_path, module_dir)
-            puppet_module = PuppetModule(full_module_dir, self.__modules_internal_path)
+            self.interface.debug('Found Puppet module: "%s"' % full_local_module_path, 3)
+            puppet_module = PuppetModule(full_local_module_path, self.interface)
             self.__modules.append(puppet_module)
 
     def compileScript(self, module):
@@ -233,20 +247,23 @@ class MakeTests:
         Compile script template for given module and return it
         """
         template_file = self.__module_templates.get(module.getName(), self.__default_template_file)
-        template = self.template_environment.get_template(template_file)
-        compiled_template = template.render(
-            modules_path=self.__modules_path,
-            manifests_path=self.__manifests_path,
-            module=module,
-        )
+        template = self.__template_environment.get_template(template_file)
+        general = {
+            'modules_path': self.__modules_path,
+            'local_modules_path': self.__local_modules_path,
+            'internal_modules_path': self.__internal_modules_path,
+            'internal_manifests_path': self.__internal_manifests_path,
+            'tests_directory_path': self.__tests_directory_path,
+        }
+        compiled_template = template.render(module=module, **general)
         return compiled_template
 
     def saveScript(self, module):
         """
         Saves compiled script to a file
         """
-        full_file_path = os.path.join(self.__tests_directory_path,
-                                      'TestPuppetModule' + module.getName().title() + '.py')
+        file_name = self.__test_file_name_prefix + module.getName().title() + '.py'
+        full_file_path = os.path.join(self.__tests_directory_path, file_name)
         script_content = self.compileScript(module)
         script_file = open(full_file_path, 'w+')
         script_file.write(script_content + "\n")
@@ -256,14 +273,21 @@ class MakeTests:
         """
         Compile and save to tests_directory_path all the test scripts. Main procedure.
         """
-        for module in self.getModules():
-            self.interface.debug('Processing module: ' + module.getName())
+        self.interface.debug('Starting makeAllScripts', 2)
+        try:
+            os.chdir(self.__make_tests_dir)
+        except OSError as error:
+            self.interface.error("Cannot change directory to %s: %s" % (self.__make_tests_dir, error.message))
+            return None
+        for module in self.getModulesList():
+            self.interface.debug('Processing module: "%s"' % module.getName(), 3)
             self.saveScript(module)
 
     def removeAllTests(self):
         """
         Remove all tests from tests_directory_path
         """
+        self.interface.debug('Starting removeAllTests in "%s"' % self.__tests_directory_path, 2)
         file_list = os.listdir(self.__tests_directory_path)
         for test_file in file_list:
             if not test_file[-3:] == '.py':
@@ -271,7 +295,7 @@ class MakeTests:
             if not test_file[0:16] == 'TestPuppetModule':
                 continue
             full_file_path = os.path.join(self.__tests_directory_path, test_file)
-            self.interface.debug("Removing test file: " + full_file_path)
+            self.interface.debug('Removing test file: "%s"' % full_file_path, 3)
             os.remove(full_file_path)
 
 

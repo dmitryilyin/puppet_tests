@@ -2,6 +2,7 @@
 import sys
 from Color import Color
 
+
 class Interface:
     def __init__(
             self,
