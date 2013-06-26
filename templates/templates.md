@@ -1,6 +1,9 @@
 Test Template API
 =================
 
+Test files are made by jinja2 template engine http://jinja.pocoo.org
+Look here for template language documentation http://jinja.pocoo.org/docs/jinja-docs.pdf
+
 General
 -------
 
@@ -15,7 +18,7 @@ PuppetModule
 
 * module.name - Module's name
 * module.path - Path to module on system where tests are made
-* module.path - List of PuppetTest objects
+* module.tests - List of PuppetTest objects
 
 PuppetTest
 ----------
@@ -23,5 +26,21 @@ PuppetTest
 * PuppetTest
 
 * test.name - Name of this test
-* test.path - Path to this test. Relative to module's path.
+* test.path - Path to this test. Relative to module's path and without file name.
 * test.file - File of this test
+
+Examples
+--------
+
+Puppet modules are in /etc/puppet/modules
+Module: ntpd
+
+ntpd.name = ntpd
+ntpd.path = /etc/puppet/modules/ntpd
+
+This module has one test: tests/init.pp
+
+test.name = init
+test.path = tests
+test.file = init.pp
+

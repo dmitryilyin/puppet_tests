@@ -10,9 +10,9 @@ class PuppetTest:
     This class represents single test of the Puppet module.
     """
 
-    def __init__(self, test_file_path, interface):
+    def __init__(self, test_file_path):
         """
-        You should give this constructor path to test file
+        You should give this constructor path to test file.
         """
         self.__test_file_path = test_file_path
         self.__tests_path = os.path.dirname(self.__test_file_path)
@@ -63,7 +63,7 @@ class PuppetModule:
 
     def __init__(self, local_module_path, interface):
         """
-        You should give this constructor the full path to the module
+        You should give this constructor the full path to the module and interface object.
         """
         self.__local_module_path = local_module_path
         self.interface = interface
@@ -90,7 +90,7 @@ class PuppetModule:
                     if not test_file[-3:] == '.pp':
                         continue
                     test_file_path = os.path.join(root, test_file)
-                    puppet_test = PuppetTest(test_file_path, self.interface)
+                    puppet_test = PuppetTest(test_file_path)
                     self.__tests.append(puppet_test)
         finally:
             # try to restore original folder on exit
@@ -150,10 +150,10 @@ class MakeTests:
     def __init__(self, tests_directory_path, local_modules_path, modules_path=None):
         """
         You should give to this constructor following arguments:
-        module_library_path = Path to puppet modules which will be scanned for test files
-        tests_directory_path = Output directory where files will be written
-        modules_internal_path = (Optional) Use this path to modules in template instead of module_library_path.
-        Useful when path to puppet modules differ on machine where tests are made and where they are executed.
+          * local_modules_path = Path to puppet modules which will be scanned for test files
+          * tests_directory_path = Output directory where files will be written
+          * modules_path = (Optional) Use this path to modules on test host system instead of local_modules_path.
+            Useful when path to puppet modules differ on machine where tests are made and where they are executed.
         """
         self.interface = Interface(debuglevel=4)
         self.interface.debug('Starting MakeTests', 1)
@@ -266,7 +266,7 @@ class MakeTests:
         full_file_path = os.path.join(self.__tests_directory_path, file_name)
         script_content = self.compileScript(module)
         script_file = open(full_file_path, 'w+')
-        script_file.write(script_content + "\n")
+        script_file.write(script_content)
         script_file.close()
 
     def makeAllScripts(self):
